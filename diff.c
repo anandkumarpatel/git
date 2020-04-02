@@ -6491,9 +6491,9 @@ void diffcore_fix_diff_index(void)
 	QSORT(q->queue, q->nr, diffnamecmp);
 }
 
-static void add_if_missing(struct repository *r,
-			   struct oid_array *to_fetch,
-			   const struct diff_filespec *filespec)
+void diff_add_if_missing(struct repository *r,
+			 struct oid_array *to_fetch,
+			 const struct diff_filespec *filespec)
 {
 	if (filespec && filespec->oid_valid &&
 	    !S_ISGITLINK(filespec->mode) &&
@@ -6504,24 +6504,42 @@ static void add_if_missing(struct repository *r,
 
 void diffcore_std(struct diff_options *options)
 {
-	if (options->repo == the_repository && has_promisor_remote()) {
-		/*
-		 * Prefetch the diff pairs that are about to be flushed.
-		 */
+	int prefetched = 0;
+	int output_formats_to_prefetch = DIFF_FORMAT_DIFFSTAT |
+		DIFF_FORMAT_NUMSTAT |
+		DIFF_FORMAT_PATCH |
+		DIFF_FORMAT_SHORTSTAT |
+		DIFF_FORMAT_DIRSTAT;
+
+	/*
+	 * Check if the user requested a blob-data-requiring diff output and/or
+	 * break-rewrite detection (which requires blob data). If yes, prefetch
+	 * the diff pairs.
+	 *
+	 * If no prefetching occurs, diffcore_rename() will prefetch if it
+	 * decides that it needs inexact rename detection.
+	 */
+	if (options->repo == the_repository && has_promisor_remote() &&
+	    (options->output_format & output_formats_to_prefetch ||
+	     (!options->found_follow && options->break_opt != -1))) {
 		int i;
 		struct diff_queue_struct *q = &diff_queued_diff;
 		struct oid_array to_fetch = OID_ARRAY_INIT;
 
 		for (i = 0; i < q->nr; i++) {
 			struct diff_filepair *p = q->queue[i];
-			add_if_missing(options->repo, &to_fetch, p->one);
-			add_if_missing(options->repo, &to_fetch, p->two);
+			diff_add_if_missing(options->repo, &to_fetch, p->one);
+			diff_add_if_missing(options->repo, &to_fetch, p->two);
 		}
+
+		prefetched = 1;
+
 		/*
 		 * NEEDSWORK: Consider deduplicating the OIDs sent.
 		 */
 		promisor_remote_get_direct(options->repo,
 					   to_fetch.oid, to_fetch.nr);
+
 		oid_array_clear(&to_fetch);
 	}
 
@@ -6534,7 +6552,7 @@ void diffcore_std(struct diff_options *options)
 			diffcore_break(options->repo,
 				       options->break_opt);
 		if (options->detect_rename)
-			diffcore_rename(options);
+			diffcore_rename(options, prefetched);
 		if (options->break_opt != -1)
 			diffcore_merge_broken();
 	}

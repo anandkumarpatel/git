@@ -431,13 +431,10 @@ static int write_message(const void *buf, size_t len, const char *filename,
 static int read_oneliner(struct strbuf *buf,
 	const char *path, int skip_if_empty)
 {
-
-	if (!file_exists(path))
-		return 0;
-
 	strbuf_reset(buf);
 	if (strbuf_read_file(buf, path, 0) < 0) {
-		warning_errno(_("could not read '%s'"), path);
+		if (errno != ENOENT && errno != ENOTDIR)
+			warning_errno(_("could not read '%s'"), path);
 		return 0;
 	}
 

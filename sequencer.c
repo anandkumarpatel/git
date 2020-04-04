@@ -420,8 +420,8 @@ static int write_message(const void *buf, size_t len, const char *filename,
 }
 
 /*
- * Reads a file that was presumably written by a shell script, i.e. with an
- * end-of-line marker that needs to be stripped.
+ * Resets a strbuf then reads a file that was presumably written by a shell
+ * script, i.e. with an end-of-line marker that needs to be stripped.
  *
  * Note that only the last end-of-line marker is stripped, consistent with the
  * behavior of "$(cat path)" in a shell script.
@@ -431,23 +431,19 @@ static int write_message(const void *buf, size_t len, const char *filename,
 static int read_oneliner(struct strbuf *buf,
 	const char *path, int skip_if_empty)
 {
-	int orig_len = buf->len;
 
 	if (!file_exists(path))
 		return 0;
 
+	strbuf_reset(buf);
 	if (strbuf_read_file(buf, path, 0) < 0) {
 		warning_errno(_("could not read '%s'"), path);
 		return 0;
 	}
 
-	if (buf->len > orig_len && buf->buf[buf->len - 1] == '\n') {
-		if (--buf->len > orig_len && buf->buf[buf->len - 1] == '\r')
-			--buf->len;
-		buf->buf[buf->len] = '\0';
-	}
+	strbuf_trim(buf);
 
-	if (skip_if_empty && buf->len == orig_len)
+	if (skip_if_empty && !buf->len)
 		return 0;
 
 	return 1;
@@ -2471,7 +2467,6 @@ void parse_strategy_opts(struct replay_opts *opts, char *raw_opts)
 
 static void read_strategy_opts(struct replay_opts *opts, struct strbuf *buf)
 {
-	strbuf_reset(buf);
 	if (!read_oneliner(buf, rebase_path_strategy(), 0))
 		return;
 	opts->strategy = strbuf_detach(buf, NULL);
@@ -2494,7 +2489,6 @@ static int read_populate_opts(struct replay_opts *opts)
 				free(opts->gpg_sign);
 				opts->gpg_sign = xstrdup(buf.buf + 2);
 			}
-			strbuf_reset(&buf);
 		}
 
 		if (read_oneliner(&buf, rebase_path_allow_rerere_autoupdate(), 1)) {
@@ -2526,7 +2520,6 @@ static int read_populate_opts(struct replay_opts *opts)
 			opts->keep_redundant_commits = 1;
 
 		read_strategy_opts(opts, &buf);
-		strbuf_reset(&buf);
 
 		if (read_oneliner(&opts->current_fixups,
 				  rebase_path_current_fixups(), 1)) {
@@ -4006,7 +3999,6 @@ cleanup_head_ref:
 				res = error(_("could not read orig-head"));
 				goto cleanup_head_ref;
 			}
-			strbuf_reset(&buf);
 			if (!read_oneliner(&buf, rebase_path_onto(), 0)) {
 				res = error(_("could not read 'onto'"));
 				goto cleanup_head_ref;

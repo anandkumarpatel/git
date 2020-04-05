@@ -144,7 +144,7 @@ struct diff_filepair *diff_queue(struct diff_queue_struct *,
 void diff_q(struct diff_queue_struct *, struct diff_filepair *);
 
 void diffcore_break(struct repository *, int);
-void diffcore_rename(struct diff_options *);
+void diffcore_rename(struct diff_options *, int prefetched);
 void diffcore_merge_broken(void);
 void diffcore_pickaxe(struct diff_options *);
 void diffcore_order(const char *orderfile);
@@ -181,5 +181,13 @@ int diffcore_count_changes(struct repository *r,
 			   void **dst_count_p,
 			   unsigned long *src_copied,
 			   unsigned long *literal_added);
+
+/*
+ * If filespec contains an OID and if that object is missing from the given
+ * repository, add that OID to to_fetch.
+ */
+void diff_add_if_missing(struct repository *r,
+			 struct oid_array *to_fetch,
+			 const struct diff_filespec *filespec);
 
 #endif

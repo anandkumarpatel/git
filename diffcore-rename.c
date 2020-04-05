@@ -7,6 +7,7 @@
 #include "object-store.h"
 #include "hashmap.h"
 #include "progress.h"
+#include "promisor-remote.h"
 
 /* Table of rename/copy destinations */
 
@@ -448,7 +449,7 @@ static int find_renames(struct diff_score *mx, int dst_cnt, int minimum_score, i
 	return count;
 }
 
-void diffcore_rename(struct diff_options *options)
+void diffcore_rename(struct diff_options *options, int prefetched)
 {
 	int detect_rename = options->detect_rename;
 	int minimum_score = options->rename_score;
@@ -536,6 +537,40 @@ void diffcore_rename(struct diff_options *options)
 		break;
 	default:
 		break;
+	}
+
+	if (!prefetched) {
+		/*
+		 * At this point we know there's actual work to do: we have rename
+		 * destinations that didn't find an exact match, and we have potential
+		 * sources. So we'll have to do inexact rename detection, which
+		 * requires looking at the blobs.
+		 *
+		 * If we haven't already prefetched, it's worth pre-fetching
+		 * them as a group now.
+		 */
+		int i;
+		struct oid_array to_fetch = OID_ARRAY_INIT;
+
+		for (i = 0; i < rename_dst_nr; i++) {
+			if (rename_dst[i].pair)
+				continue; /* already found exact match */
+			diff_add_if_missing(options->repo, &to_fetch, rename_dst[i].two);
+		}
+		for (i = 0; i < rename_src_nr; i++) {
+			if (skip_unmodified &&
+			    diff_unmodified_pair(rename_src[i].p))
+				/*
+				 * The "for" loop below will not need these
+				 * blobs, so skip prefetching.
+				 */
+				continue;
+			diff_add_if_missing(options->repo, &to_fetch, rename_src[i].p->one);
+		}
+		if (to_fetch.nr)
+			promisor_remote_get_direct(options->repo,
+						   to_fetch.oid, to_fetch.nr);
+		oid_array_clear(&to_fetch);
 	}
 
 	if (options->show_rename_progress) {

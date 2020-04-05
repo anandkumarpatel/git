@@ -94,7 +94,8 @@ will be appended to the specified message.
 
 --abort::
 	Abort the current conflict resolution process, and
-	try to reconstruct the pre-merge state.
+	try to reconstruct the pre-merge state. If an autostash entry is
+	present, apply it back to the worktree.
 +
 If there were uncommitted worktree changes present when the merge
 started, 'git merge --abort' will in some cases be unable to
@@ -102,7 +103,8 @@ reconstruct these changes. It is therefore recommended to always
 commit or stash your changes before running 'git merge'.
 +
 'git merge --abort' is equivalent to 'git reset --merge' when
-`MERGE_HEAD` is present.
+`MERGE_HEAD` is present unless `MERGE_AUTOSTASH` is also present where
+the stash entry is applied to the worktree.
 
 --quit::
 	Forget about the current merge in progress. Leave the index
